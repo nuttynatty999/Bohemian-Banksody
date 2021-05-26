@@ -1,0 +1,32 @@
+DROP TABLE IF EXISTS rnktable1;
+
+    WITH T AS
+    (
+    SELECT DISTRICT_ID, cast(COUNT(CLIENT_ID) as decimal (10,6) )AS Clientcnt
+    FROM CLIENT
+    GROUP BY district_id
+    )
+    SELECT d.district_id, 
+			d.district_name , 
+			d.avg_salary, 
+			RANK() OVER (ORDER BY d.avg_salary DESC) as salaryrnk , 
+			d.no_inhab, 
+			RANK() OVER (ORDER BY d.no_inhab DESC) as inhabrnk , 
+			(t.Clientcnt/no_inhab)*100 as pctclntproportion ,
+			RANK() OVER (ORDER BY (t.Clientcnt/no_inhab)*100) as clntproprnk, 
+			RANK() OVER (ORDER BY d.[unemployment96]) as unemp96rnk
+    INTO rnktable1
+    FROM T
+    JOIN DISTRICT D
+    ON D.district_id = T.district_id
+    order by avg_salary
+
+ -------------------------------------------
+CREATE OR ALTER VIEW totrnk AS
+
+SELECT district_name, DENSE_RANK() OVER (ORDER BY (salaryrnk+inhabrnk+clntproprnk+unemp96rnk)DESC) as totrnk
+FROM rnktable1;
+
+-----------------------
+SELECT *, CAST(CAST(totrnk AS FLOAT)/100 AS DECIMAL (5,2)) AS Gscore
+FROM totrnk
