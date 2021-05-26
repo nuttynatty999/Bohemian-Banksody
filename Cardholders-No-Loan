@@ -1,0 +1,11 @@
+
+SELECT client_id, cc.district_name , account_id, type, avg_salary, status
+FROM client_card_loan AS cc
+LEFT JOIN [dbo].[pct_bad_loans_by_dist] AS gd
+ON cc.district_id = gd.district_id
+LEFT JOIN district AS d
+ON cc.district_id = d.district_id
+WHERE pct_of_loans_bad < 5 -- (can change the % value )
+AND avg_salary > 8000 -- (Can change the avg salary value  )
+AND type <> 'junior'
+AND status IS NULL -- ( no current loan with us) 
