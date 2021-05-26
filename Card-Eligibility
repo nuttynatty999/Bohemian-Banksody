@@ -1,0 +1,59 @@
+CREATE OR ALTER PROCEDURE CardEligibilty (@accountid INT)
+AS
+BEGIN
+    DECLARE @eligible BIT = 1 -- Eligible for card. (1 = True, 0 = False)
+    DECLARE @card VARCHAR(10) = ''
+
+ 
+
+    -- Card type/eligibility by account holding duration.
+    IF EXISTS (SELECT * FROM bank_duration -- IF eligible for Junior
+        WHERE account_id = @accountid
+        AND months_account_held >= 24
+        AND YEAR(DOB) <= 1974)
+        BEGIN
+            SET @card = 'Junior'
+        END
+    ELSE IF EXISTS (SELECT * FROM bank_duration -- IF eligible for Classic
+        WHERE account_id = @accountid
+        AND months_account_held >= 24
+        AND months_account_held <= 36)
+        BEGIN
+            SET @card = 'Classic'
+        END
+    ELSE IF EXISTS (SELECT * FROM bank_duration -- IF eligible for Gold
+        WHERE account_id = @accountid
+        AND months_account_held >= 36)
+        BEGIN
+            SET @card = 'Gold'
+        END
+    ELSE
+        BEGIN
+            SET @eligible = 0
+        END
+
+ 
+
+    -- Card eligibility on funds.
+    IF EXISTS (SELECT * FROM dbo.monthly_statement
+        WHERE account_id = @accountid
+        GROUP BY account_id
+        HAVING AVG(balance) > 30000)
+        BEGIN
+            IF EXISTS (SELECT * FROM dbo.monthly_statement WHERE account_id = @accountid AND balance < 0)
+            BEGIN
+                SET @eligible = 0
+            END
+        END
+    ELSE
+        BEGIN
+            SET @eligible = 0
+        END
+
+ 
+
+    IF (@eligible = 1)
+        PRINT 'Eligible for ' + @card + ' card'
+    ELSE
+        PRINT 'DENIED!'
+END
