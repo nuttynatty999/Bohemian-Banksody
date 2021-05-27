@@ -1,0 +1,145 @@
+CREATE OR ALTER PROCEDURE LoanAssess(@district_name VARCHAR(50), @account_id INT, @salary INT)
+AS 
+BEGIN;
+DECLARE @points INT = 0;
+DECLARE @loanhist VARCHAR(50);
+DECLARE @credit VARCHAR(50);
+
+ 
+
+--Throws and error if district not listed in district table
+IF NOT EXISTS (SELECT * FROM district
+                WHERE @district_name = district_name)
+    BEGIN
+    RAISERROR('Invalid District', 1,10)
+    RETURN
+    END;
+-- Allocates points based on pct of loans previously defaulted in your district
+IF EXISTS (SELECT pct_of_loans_bad    --'bad' = status B
+            FROM pct_bad_loans_by_dist
+            WHERE @district_name = district_name
+            AND pct_of_loans_bad = 0)
+    BEGIN 
+    SET @points = @points + 5;
+    END;
+ELSE IF EXISTS (SELECT pct_of_loans_bad
+                FROM pct_bad_loans_by_dist
+                WHERE @district_name = district_name
+                AND pct_of_loans_bad BETWEEN 0 AND 15)
+    BEGIN 
+    SET @points = @points + 2;
+    END;
+ELSE IF EXISTS (SELECT pct_of_loans_bad
+                FROM pct_bad_loans_by_dist
+                WHERE @district_name = district_name
+                AND pct_of_loans_bad > 25)
+    BEGIN 
+    SET @points = @points -5;
+    END
+-- Checks status of any other loans they have/ have had
+
+ 
+
+IF EXISTS (SELECT *
+            FROM loan
+            WHERE @account_id = account_id
+            AND status = 'A')
+    BEGIN;
+    SET @points = @points + 5
+    SET @loanhist = 'Previous Loan Repaid'
+    END;
+ELSE IF EXISTS (SELECT *
+            FROM loan
+            WHERE @account_id = account_id
+            AND status = 'B')
+    BEGIN;
+    SET @points = @points - 100;
+    SET @loanhist ='Previous Loan Defaulted-Blacklist';
+    END;
+ELSE IF EXISTS (SELECT *
+            FROM loan
+            WHERE @account_id = account_id
+            AND status IN ('C', 'D'))
+    BEGIN;
+    SET @loanhist ='Have an Ongoing Loan With Us';
+    END;
+ELSE 
+    BEGIN;
+    SET @loanhist = 'Never Had A Loan With Us';
+    END;
+-- Checks whether they have a credit card with us for further research
+--Would be useful to look at specifics about existing credit users spending habits
+IF EXISTS (    SELECT c.card_id , d.account_id
+            FROM card AS c
+            JOIN disp AS d
+            ON d.disp_id = c.disp_id
+            WHERE @account_id = account_id)
+        BEGIN;
+        SET @credit = 'Check Credit Card History. Card_id = '+ (SELECT TOP 1 CONVERT(VARCHAR(5),c.card_id)
+                                                                FROM card AS c
+                                                                JOIN disp AS d
+                                                                ON d.disp_id = c.disp_id
+                                                                WHERE @account_id = account_id);
+        END
+ELSE 
+        BEGIN;
+        SET @credit = 'No Credit Card History With Us';
+        END;
+--Compares their salary to the national average salary
+--Would've been useful to have average cost of living (by district)
+IF @salary > 1.3*(SELECT *    FROM national_avg_salary)
+        BEGIN;
+        SET @points = @points + 10
+        END;
+IF @salary BETWEEN 1.1*(SELECT * FROM national_avg_salary) AND 1.3*(SELECT * FROM national_avg_salary)
+        BEGIN;
+        SET @points = @points + 5
+        END;
+IF 0.9*(SELECT * FROM national_avg_salary) <= @salary 
+    AND @salary < 1.1*(SELECT * FROM national_avg_salary)
+        BEGIN;
+        SET @points = @points 
+        END;
+IF @salary < 0.9*(SELECT *    FROM national_avg_salary)
+    AND @salary >= 5000
+        BEGIN;
+        SET @points = @points - 5
+        END;
+IF @salary < 5000
+        BEGIN;
+        SET @points = @points - 10
+        END;
+
+ 
+
+--Prints whether or not the account has a loan history with us, and risk etc
+IF @loanhist = 'Have an Ongoing Loan With Us'
+    BEGIN;
+    PRINT @loanhist;
+    END;
+IF @loanhist = 'Previous Loan Defaulted-Blacklist'
+    BEGIN;
+    PRINT @loanhist
+    END;
+IF (@loanhist = 'Previous Loan Repaid' OR @loanhist = 'Never Had A Loan With Us')
+    BEGIN;
+    IF @points <-10 
+        BEGIN;
+        PRINT 'No Loan';
+        END;
+    ELSE IF (-10 <= @points AND @points <0)
+        BEGIN;
+        PRINT 'High Risk!';  
+        END;
+    ELSE  IF (0 <= @points AND @points < 10)
+        BEGIN;
+        PRINT 'Medium Risk';  
+        END;
+    ELSE 
+        BEGIN;
+        PRINT 'Low Risk :)';
+        END;
+    PRINT @loanhist;
+    Print @credit;
+    END;
+END;
