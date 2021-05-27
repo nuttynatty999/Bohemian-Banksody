@@ -1,0 +1,34 @@
+CREATE VIEW monthly_statement AS
+WITH montly_statement AS
+(
+    SELECT
+        account_id,
+        MONTH(date) AS month,
+        YEAR(date) AS year,
+        balance,
+        RANK() OVER (PARTITION BY MONTH(date), YEAR(date) ORDER BY date DESC) AS date_rnk
+    FROM trans
+)
+SELECT
+    account_id,
+    month,
+    year,
+    CAST(AVG(balance) AS decimal(8,2)) AS balance
+FROM montly_statement
+WHERE date_rnk = 1
+
+ 
+
+CREATE OR ALTER PROCEDURE monthly_spending @accountid INT
+AS
+SELECT
+    account_id,
+    month,
+    year,
+    balance,
+    LAG(balance) OVER (PARTITION BY account_id ORDER BY year,month) AS previous_balance,
+    balance - LAG(balance) OVER (PARTITION BY account_id ORDER BY year,month) AS monthly_change,
+    ((balance - LAG(balance) OVER (PARTITION BY account_id ORDER BY year,month))/ABS(LAG(balance) OVER (PARTITION BY account_id ORDER BY year,month))*100) AS pct_change
+FROM dbo.monthly_statement
+WHERE account_id = @accountid
+ORDER BY year, month
