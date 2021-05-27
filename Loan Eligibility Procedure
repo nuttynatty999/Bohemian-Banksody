@@ -143,3 +143,4 @@ IF (@loanhist = 'Previous Loan Repaid' OR @loanhist = 'Never Had A Loan With Us'
     Print @credit;
     END;
 END;
+
